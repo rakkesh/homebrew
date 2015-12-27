@@ -1,9 +1,8 @@
 class Freeswitch < Formula
-  desc "Telephony platform to route various communication protocols"
+  desc "Cross-Platform Scalable Free Multi-Protocol Soft Switch"
   homepage "https://freeswitch.org"
-  url "https://freeswitch.org/stash/scm/fs/freeswitch.git",
-      :tag => "v1.4.23",
-      :revision => "aaef0e298730d0f1cc11f2573bb6e6d999b0242d"
+  url "https://files.freeswitch.org/releases/freeswitch/freeswitch-1.6.5.tar.xz"
+  sha256 "52f3a8fa1dc760908472fa28c5cd6e35d7143274160d60a555b08f7f18f41430"
 
   head "https://freeswitch.org/stash/scm/fs/freeswitch.git"
 
@@ -18,11 +17,12 @@ class Freeswitch < Formula
   option "with-sounds-fr", "Install French (June) sounds"
   option "with-sounds-ru", "Install Russian (Elena) sounds"
 
+  depends_on :apr => :build
   depends_on "autoconf" => :build
   depends_on "automake" => :build
   depends_on "libtool" => :build
   depends_on "pkg-config" => :build
-  depends_on :apr => :build
+  depends_on "yasm" => :build
 
   depends_on "curl"
   depends_on "jpeg"
@@ -31,6 +31,8 @@ class Freeswitch < Formula
   depends_on "pcre"
   depends_on "speex"
   depends_on "sqlite"
+  depends_on "opus"
+  depends_on "libsndfile"
 
   #----------------------- Begin sound file resources -------------------------
   sounds_url_base = "https://files.freeswitch.org/releases/sounds"
@@ -137,8 +139,53 @@ class Freeswitch < Formula
 
   #------------------------ End sound file resources --------------------------
 
+  # for building mod_fsv - video support
+  resource "libyuv" do
+    url "https://freeswitch.org/stash/scm/sd/libyuv.git",
+        :revision => "1ebf86795cb213a37f06eb1ef3713cff080568ea"
+  end
+
+  resource "libvpx" do
+    url "https://freeswitch.org/stash/scm/sd/libvpx.git",
+        :revision => "cbecf57f3e0d85a7b7f97f3ab7c507f6fe640a93"
+  end
+
+  # for building broadvoice speech codecs
+  resource "libbroadvoice" do
+    url "https://freeswitch.org/stash/scm/sd/libbroadvoice.git",
+        :revision => "ead491e99756c86f98c5a2063215205bcd6cfd89"
+  end
+
   def install
-    system "./bootstrap.sh", "-j"
+    resource("libyuv").stage do
+      inreplace "Makefile", "PREFIX:=/usr", "PREFIX:=vendor="#{libexec}/vendor"
+      system "make"
+      system "make", "install"
+    end
+
+    resource("libvpx").stage do
+      mkdir_p "build"
+      cd "build"
+      system "../configure", "--prefix=vendor="#{libexec}/vendor"
+      system "make"
+      system "make", "install"
+    end
+
+    resource("libbroadvoice").stage do
+      system "autoreconf", "-i"
+      system "./configure", "--prefix=vendor="#{libexec}/vendor"
+      system "make"
+      system "make", "install"
+    end
+
+    # mac os x compatibility
+    inreplace "src/mod/endpoints/mod_verto/ws.c" do |s|
+      s.gsub! "__BYTE_ORDER == __BIG_ENDIAN", "BYTE_ORDER == BIG_ENDIAN"
+      s.gsub! "__bswap_64", "__builtin_bswap64"
+    end
+
+    # set vendored packages in PKG_CONFIG_PATH
+    ENV.append_path "PKG_CONFIG_PATH", "vendor="#{libexec}/vendor/lib/pkgconfig"
 
     # tiff will fail to find OpenGL unless told not to use X
     inreplace "libs/tiff-4.0.2/configure.gnu", "--with-pic", "--with-pic --without-x"
@@ -193,7 +240,7 @@ class Freeswitch < Formula
     end
   end
 
-  plist_options :manual => "freeswitch -nc --nonat"
+  plist_options :manual => "freeswitch -ncwait -nonat"
 
   def plist; <<-EOS.undent
     <?xml version="1.0" encoding="UTF-8"?>
