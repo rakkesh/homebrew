@@ -3,6 +3,7 @@ class Librsync < Formula
   homepage "http://librsync.sourceforge.net/"
   url "https://github.com/librsync/librsync/archive/v2.0.0.tar.gz"
   sha256 "b5c4dd114289832039397789e42d4ff0d1108ada89ce74f1999398593fae2169"
+  head "https://github.com/librsync/librsync.git"
 
   bottle do
     sha256 "7205930ff0e86bee031c515209bfb8ef9920274420eaa23701756ce4ae32fb15" => :el_capitan
